@@ -1,0 +1,15 @@
+name: tap-fsm-ci
+on: [push, pull_request]
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Run simulation
+        run: |
+          mkdir -p sim
+          make sim | tee sim.log
+      - name: Check result
+        run: grep -q "RESULT.*PASS" sim.log
