@@ -25,4 +25,22 @@ package jtag_pkg;
     UPDATE_IR        = 4'hF
   } tap_state_e;
 
+  // ---- Day 2 additions: instruction-register width and mandatory opcodes.
+  // 4-bit IR. EXTEST conventionally all-zero, BYPASS all-one; everything
+  // not explicitly decoded must select BYPASS (1149.1 safety requirement).
+  localparam int unsigned IR_W = 4;
+
+  typedef enum logic [IR_W-1:0] {
+    INSN_EXTEST  = 4'b0000,
+    INSN_SAMPLE  = 4'b0001,   // SAMPLE/PRELOAD -> boundary-scan register
+    INSN_IDCODE  = 4'b0010,   // -> 32-bit IDCODE register
+    INSN_BYPASS  = 4'b1111    // -> 1-bit BYPASS register
+  } jtag_insn_e;
+
+  // Hardcoded device identification register value.
+  // 1149.1 requires bit 0 == 1 so a IDCODE scan is distinguishable from the
+  // single 0 a BYPASS register captures. The nibbles are just a readable
+  // nod to the standard; pick anything with LSB=1 for a real part.
+  localparam logic [31:0] IDCODE_VALUE = 32'h1149_0001;
+
 endpackage : jtag_pkg

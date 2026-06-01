@@ -1,25 +1,34 @@
-# JTAG TAP controller -- simulation makefile (Icarus Verilog + GTKWave)
-IVERILOG = iverilog -g2012
-VVP      = vvp
-GTKWAVE  = gtkwave
+# Makefile -- IEEE 1149.1 JTAG TAP controller
+#
+#   make          build + run both testbenches (Day 1 FSM, Day 2 full TAP)
+#   make fsm      Day 1: FSM-only testbench
+#   make top      Day 2: full TAP (IR + BYPASS/IDCODE/boundary-scan)
+#   make clean    remove build/sim artifacts
+#
+# The Day 2 testbench calls $fatal on failure, so a failing run returns a
+# non-zero exit code -- safe to drop straight into CI without grepping logs.
 
-RTL = rtl/jtag_pkg.sv rtl/jtag_tap_fsm.sv
-TB  = tb/tb_jtag_tap_fsm.sv
-OUT = sim/tap_fsm.out
-VCD = sim/tap_fsm.vcd
+IVERILOG := iverilog -g2012
+VVP      := vvp
 
-.PHONY: all sim wave clean
+RTL_CORE := rtl/jtag_pkg.sv rtl/jtag_tap_fsm.sv
+RTL_FULL := $(RTL_CORE) rtl/jtag_ir.sv rtl/jtag_tap.sv
 
-all: sim
+.PHONY: all fsm top clean
 
-$(OUT): $(RTL) $(TB)
-	$(IVERILOG) -o $(OUT) $(RTL) $(TB)
+all: fsm top
 
-sim: $(OUT)        ## compile + run the self-checking testbench
-	$(VVP) $(OUT)
+fsm: | sim
+	$(IVERILOG) -o sim/tap_fsm.vvp $(RTL_CORE) tb/tb_jtag_tap_fsm.sv
+	$(VVP) sim/tap_fsm.vvp
 
-wave: sim          ## run, then open the waveform in GTKWave
-	$(GTKWAVE) $(VCD) &
+top: | sim
+	$(IVERILOG) -o sim/tap_top.vvp $(RTL_FULL) tb/tb_jtag_top.sv
+	$(VVP) sim/tap_top.vvp
+
+# Order-only prerequisite: git doesn't track empty dirs, so create it on demand.
+sim:
+	mkdir -p sim
 
 clean:
-	rm -f $(OUT) $(VCD)
+	rm -rf sim/*.vvp sim/*.vcd
