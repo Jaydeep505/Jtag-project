@@ -10,6 +10,6 @@ jobs:
       - name: Run simulation
         run: |
           mkdir -p sim
-          make sim | tee sim.log
+          make | tee sim.log
       - name: Check result
         run: grep -q "RESULT.*PASS" sim.log
