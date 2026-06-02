@@ -31,6 +31,24 @@ module tb_jtag_top;
     .core_in(core_in), .core_out(core_out)
   );
 
+  // Day-3 assertion checker (immediate assertions, runs in the Icarus CI).
+  // Under SVA_ON the concurrent assertions in rtl/jtag_sva.sv (bound into the
+  // DUT) do the checking instead, so the immediate checker is left out to
+  // avoid running two equivalent assertion sets at once.
+`ifndef SVA_ON
+  jtag_assertions u_assert (
+    .tck(tck), .trst_n(trst_n),
+    .reset_n_int(dut.reset_n_int),
+    .instruction(instruction),
+    .sel_idcode(dut.sel_idcode),
+    .sel_bsr(dut.sel_bsr),
+    .sel_bypass(dut.sel_bypass),
+    .shift_ir(dut.shift_ir),
+    .shift_dr(dut.shift_dr),
+    .tdo(tdo)
+  );
+`endif
+
   int errors = 0;
   int checks = 0;
 
@@ -93,7 +111,13 @@ module tb_jtag_top;
     tdi = 0; tms = 1; core_in = 2'b00;
 
     // ---- Async reset ---------------------------------------------------
-    trst_n = 1'b0; #5; trst_n = 1'b1; #5;
+    // Start de-asserted, then drive a real high->low edge: the async resets
+    // are negedge-triggered, so a TB that begins with trst_n already 0 would
+    // produce no edge under a 2-state simulator (e.g. Verilator). The pulse
+    // below resets cleanly under both 2- and 4-state tools.
+    trst_n = 1'b1; #2;
+    trst_n = 1'b0; #5;
+    trst_n = 1'b1; #5;
     check(state == TEST_LOGIC_RESET, "async reset -> Test-Logic-Reset");
     check(instruction == INSN_IDCODE, "reset default instruction = IDCODE");
 
@@ -140,14 +164,27 @@ module tb_jtag_top;
           "unused opcode behaves as BYPASS (1-bit delay)");
 
     // ---- Tally ---------------------------------------------------------
-    $display("\n================ SUMMARY ================");
-    $display("checks run : %0d", checks);
-    $display("errors     : %0d", errors);
-    if (errors == 0) $display("RESULT     : PASS");
-    else             $display("RESULT     : FAIL");
-    $display("=========================================");
+    begin
+      int assert_fails;
+      int total_errors;
+`ifdef SVA_ON
+      assert_fails = 0;   // concurrent SVA reports via $error under --assert
+`else
+      assert_fails = u_assert.fails;
+`endif
+      total_errors = errors + assert_fails;
+      $display("\n================ SUMMARY ================");
+      $display("directed checks  : %0d", checks);
+      $display("directed errors  : %0d", errors);
+      $display("assertion fails  : %0d", assert_fails);
+      $display("total errors     : %0d", total_errors);
+      if (total_errors == 0) $display("RESULT     : PASS");
+      else                   $display("RESULT     : FAIL");
+      $display("=========================================");
 
-    if (errors != 0) $fatal(1, "Day-2 verification FAILED with %0d error(s)", errors);
+      if (total_errors != 0)
+        $fatal(1, "Day-2/3 verification FAILED with %0d error(s)", total_errors);
+    end
     $finish;
   end
 

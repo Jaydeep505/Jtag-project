@@ -31,7 +31,8 @@ module tb_jtag_tap_fsm;
 
   int errors      = 0;
   int checks      = 0;
-  bit covered [16][2];   // covered[from_state][tms]
+  bit covered [16][2];   // covered[from_state][tms] -- transition coverage
+  bit visited [16];      // visited[state]           -- state coverage
 
   // .name() may only be called on an enum *variable* in Icarus, not on a
   // net/port, so wrap it: the function argument is a variable.
@@ -47,6 +48,8 @@ module tb_jtag_tap_fsm;
     #2 tck = 1'b1;        // rising edge -> state <= next
     #2;                   // settle
     covered[int'(from)][tms_v] = 1'b1;
+    visited[int'(from)]        = 1'b1;   // state coverage: source...
+    visited[int'(state)]       = 1'b1;   // ...and the state just entered
     checks++;
     if (state !== exp) begin
       errors++;
@@ -144,18 +147,33 @@ module tb_jtag_tap_fsm;
     build_tour();
     for (int k = 0; k < 48; k++) step(tour_tms[k], tour_exp[k]);
 
-    // ---- 3. Edge-coverage check ----
-    $display("\n-- edge coverage --");
+    // ---- 3. Functional coverage: states and transitions ----
+    $display("\n-- functional coverage --");
     begin
-      int hit; hit = 0;
+      int states_hit; int edges_hit;
+      states_hit = 0; edges_hit = 0;
+
+      // State coverage: all 16 controller states reached.
+      for (int s = 0; s < 16; s++)
+        if (visited[s]) states_hit++;
+        else begin
+          errors++;
+          $display("  [FAIL] state never visited: %s", sname(tap_state_e'(s)));
+        end
+
+      // Transition coverage: all 32 edges (16 states x 2 TMS values) taken.
       for (int s = 0; s < 16; s++)
         for (int t = 0; t < 2; t++)
-          if (covered[s][t]) hit++;
+          if (covered[s][t]) edges_hit++;
           else begin
             errors++;
-            $display("  [FAIL] edge never exercised: state=%0d tms=%0d", s, t);
+            $display("  [FAIL] edge never exercised: %s tms=%0d",
+                     sname(tap_state_e'(s)), t);
           end
-      $display("  edges covered: %0d / 32", hit);
+
+      checks += 2;
+      $display("  state coverage      : %0d / 16", states_hit);
+      $display("  transition coverage : %0d / 32", edges_hit);
     end
 
     // ---- 4. "5 TMS-high TCKs -> Test-Logic-Reset" from a deep state ----
@@ -181,7 +199,17 @@ module tb_jtag_tap_fsm;
     if (errors == 0) $display(" RESULT     : PASS");
     else             $display(" RESULT     : FAIL");
     $display("==================================================");
+
+    // Honest exit code: fail the build (non-zero) on any error, like the
+    // Day-2 bench, instead of always returning 0 via a bare $finish.
+    if (errors != 0) $fatal(1, "Day-1 FSM verification FAILED with %0d error(s)", errors);
     $finish;
+  end
+
+  // Safety net so a hang can't masquerade as a pass.
+  initial begin
+    #100000;
+    $fatal(1, "TIMEOUT: testbench did not finish");
   end
 
 endmodule : tb_jtag_tap_fsm

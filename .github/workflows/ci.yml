@@ -1,15 +1,47 @@
-name: tap-fsm-ci
-on: [push, pull_request]
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
 jobs:
-  simulate:
+  # --- Primary gate: Icarus Verilog runs both testbenches. ---------------
+  # Both benches $fatal on error (non-zero exit), so `make` failing is enough
+  # to fail the job. The explicit log checks below are belt-and-braces: they
+  # also fail the job if a FAIL line appears or a PASS line is missing, so a
+  # future change that weakened the exit code can't sneak a red run through.
+  icarus:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Icarus Verilog
         run: sudo apt-get update && sudo apt-get install -y iverilog
-      - name: Run simulation
+
+      - name: Build + run testbenches
+        run: make | tee sim.log
+
+      - name: Fail on any FAIL line
+        run: "! grep -q 'FAIL' sim.log"
+
+      - name: Require a PASS from each bench
         run: |
-          mkdir -p sim
-          make | tee sim.log
-      - name: Check result
-        run: grep -q "RESULT.*PASS" sim.log
+          count=$(grep -c 'RESULT     : PASS' sim.log)
+          echo "PASS lines: $count (expected 2)"
+          test "$count" -eq 2
+
+  # --- Secondary gate: Verilator elaborates + runs the concurrent SVA. ---
+  # This proves rtl/jtag_sva.sv (the `assert property` form) is real and
+  # passes on an SVA-capable simulator, not just that it parses.
+  verilator-sva:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator
+        run: sudo apt-get update && sudo apt-get install -y verilator
+
+      - name: Run concurrent SVA
+        run: make sva
