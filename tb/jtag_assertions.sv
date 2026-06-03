@@ -1,5 +1,5 @@
 // jtag_assertions.sv
-// Day-3 assertion checker for the IEEE 1149.1 TAP -- the version that RUNS
+// Assertion checker for the IEEE 1149.1 TAP -- the version that RUNS
 // in CI.
 //
 // Icarus Verilog 12 does not support concurrent SVA (`assert property`),

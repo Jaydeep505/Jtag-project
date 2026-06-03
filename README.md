@@ -4,19 +4,21 @@
 
 A small, fully verified Design-for-Test (DFT) block: the Test Access Port
 controller defined by IEEE 1149.1, written in SystemVerilog and verified with
-self-checking testbenches, assertions, and functional coverage. The default
-flow runs on Icarus Verilog; the concurrent-SVA flow runs on Verilator.
+self-checking testbenches, assertions, functional coverage, and a
+programmatically generated scan-vector set replayed against the RTL. The
+default flow runs on Icarus Verilog; the concurrent-SVA flow runs on Verilator.
 
-## Status
+## What's implemented
 
-- **Day 1 (done):** 16-state TAP controller FSM + self-checking transition
-  test. 16/16 state coverage, 32/32 transition coverage.
-- **Day 2 (done):** instruction register (capture/shift/update), the DR mux,
-  and the three mandatory data registers — BYPASS (1b), IDCODE (32b), and a
-  4-cell boundary-scan register around a toy AND/OR core.
-- **Day 3 (done):** assertions for the 1149.1 invariants (immediate form run
-  by Icarus, concurrent-SVA form run by Verilator), functional coverage, and
-  this write-up.
+- A 16-state IEEE 1149.1 TAP controller FSM, with decoded capture/shift/update
+  strobes for the IR and DR logic.
+- A 4-bit instruction register (capture/shift/update) and the DR mux.
+- The three mandatory data registers: BYPASS (1b), IDCODE (32b), and a 4-cell
+  boundary-scan register wrapping a toy AND/OR core.
+- Verification: directed self-checking benches with functional-coverage gating,
+  the six 1149.1 invariants as assertions (immediate form under Icarus,
+  concurrent SVA under Verilator), and a standalone Tcl scan-vector generator
+  whose output is replayed against the DUT and checked bit-for-bit.
 
 ## Layout
 
@@ -28,11 +30,14 @@ rtl/
   jtag_tap.sv        # top: FSM + IR + DRs + DR mux + TDO stage
   jtag_sva.sv        # concurrent SVA (assert property), bound; Verilator-only
 tb/
-  tb_jtag_tap_fsm.sv # Day-1 directed FSM bench + state/transition coverage
-  tb_jtag_top.sv     # Day-2/3 directed scan bench, wires in the checker
+  tb_jtag_tap_fsm.sv # directed FSM bench + state/transition coverage
+  tb_jtag_top.sv     # directed scan bench, wires in the checker
+  tb_jtag_replay.sv  # replays the generated vectors against the DUT
   jtag_assertions.sv # immediate-assertion checker (runs under Icarus)
   jtag_coverage.sv   # covergroup form, for covergroup-capable simulators
-sim/                 # build + waveform artifacts (generated, git-ignored)
+scripts/
+  gen_jtag_vectors.tcl # generates sim/jtag_vectors.vec from the TAP graph
+sim/                 # build + waveform + vector artifacts (generated, git-ignored)
 .github/workflows/ci.yml
 Makefile
 ```
@@ -128,11 +133,11 @@ distinguishable on TDO from the single 0 a BYPASS register captures.
 
 ## Verification
 
-The design is checked three ways, all gated in CI.
+The design is checked four ways, all gated in CI.
 
-**Directed self-checking testbenches.** The Day-1 bench drives a 48-step TMS
-tour built to traverse every edge of the diagram and checks each landing state
-against the spec by hand; the Day-2 bench drives real scan sequences through
+**Directed self-checking testbenches.** The FSM bench drives a 48-step TMS tour
+built to traverse every edge of the diagram and checks each landing state
+against the spec by hand; the full-TAP bench drives real scan sequences through
 TDI/TDO and checks the bits (IDCODE read-back, BYPASS one-cycle delay,
 boundary-scan SAMPLE capture, unused-opcode-to-BYPASS). Both `$fatal` on any
 error, so a failing run returns a non-zero exit code.
@@ -176,13 +181,34 @@ support:
   simulation. Each assertion has been mutation-tested under both tools (inject
   a bug -> the relevant assertion fires and the run exits non-zero).
 
+**Generated scan vectors + replay.** `scripts/gen_jtag_vectors.tcl` is a
+standalone Tcl tool that models the TAP state graph, computes the TMS
+navigation between states by breadth-first search, and writes cycle-accurate
+`(tms, tdi, expected-tdo)` vectors to `sim/jtag_vectors.vec`. Scans are
+described at the `load-IR` / `scan-DR` level — the bit-level TMS path is
+derived, not hand-counted, the way real pattern tooling works.
+`tb/tb_jtag_replay.sv` reads that file back, drives each cycle into the DUT,
+and checks TDO against the expected column. A literal `x` marks a response the
+generator can't predict (e.g. a pin-state-dependent boundary-scan capture), so
+those cycles are driven but not checked. `$fatal` on any mismatch, so
+`make replay` gates CI like the other benches — a corrupted vector fails the
+build. The vector file is plain text, one TCK per line:
+
+```
+# tms tdi tdo
+0 0 1     # drive TMS=0, TDI=0, expect TDO=1
+1 0 x     # drive TMS=1, TDI=0, TDO unchecked
+```
+
 ## Run it
 
 ```
-make        # Icarus: both benches (FSM coverage + full-TAP directed + asserts)
-make fsm    # Day 1 only:  FSM bench + state/transition coverage
-make top    # Day 2/3:     full TAP + immediate-assertion checker
-make sva    # Day 3:       concurrent SVA under Verilator (assert property)
+make          # Icarus: FSM coverage + full-TAP directed + asserts + vector replay
+make fsm      # FSM bench + state/transition coverage
+make top      # full TAP + immediate-assertion checker
+make vectors  # generate sim/jtag_vectors.vec with the Tcl tool
+make replay   # replay the generated vectors against the DUT, check TDO
+make sva      # concurrent SVA under Verilator (assert property)
 make clean
 ```
 
@@ -192,13 +218,16 @@ Waveforms land in `sim/*.vcd`; open them with GTKWave or Surfer
 ## Toolchain
 
 ```
-brew install icarus-verilog verilator surfer   # macOS
-sudo apt-get install -y iverilog verilator      # Debian/Ubuntu (as in CI)
+brew install icarus-verilog verilator surfer tcl-tk   # macOS
+sudo apt-get install -y iverilog verilator tcl         # Debian/Ubuntu (as in CI)
 ```
 
-CI runs two jobs on every push: Icarus builds and runs both benches (with
-log-level PASS/FAIL gating on top of the exit code), and Verilator elaborates
-and runs the concurrent SVA.
+`tclsh` drives the scan-vector generator, so the default `make` (which runs
+`replay`) needs Tcl available alongside the simulators.
+
+CI runs two jobs on every push: Icarus builds and runs the benches plus the
+vector replay (with log-level PASS/FAIL gating on top of the exit code), and
+Verilator elaborates and runs the concurrent SVA.
 
 ## A note on Icarus 12
 

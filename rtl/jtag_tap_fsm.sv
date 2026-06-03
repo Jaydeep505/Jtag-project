@@ -6,9 +6,8 @@
 // controller into Test-Logic-Reset (1149.1 also allows reaching this state
 // by holding TMS high for 5 TCKs, which this FSM does naturally).
 //
-// Day-1 deliverable: state sequencing only. The decoded strobe outputs
-// (capture_*, shift_*, update_*, reset_n_int) are the hooks the IR/DR logic
-// hangs off in Day 2.
+// State sequencing only. The decoded strobe outputs (capture_*, shift_*,
+// update_*, reset_n_int) are the hooks the IR and DR logic hang off.
 
 module jtag_tap_fsm
   import jtag_pkg::*;

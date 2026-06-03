@@ -200,9 +200,9 @@ module tb_jtag_tap_fsm;
     else             $display(" RESULT     : FAIL");
     $display("==================================================");
 
-    // Honest exit code: fail the build (non-zero) on any error, like the
-    // Day-2 bench, instead of always returning 0 via a bare $finish.
-    if (errors != 0) $fatal(1, "Day-1 FSM verification FAILED with %0d error(s)", errors);
+    // Honest exit code: fail the build (non-zero) on any error, instead of
+    // always returning 0 via a bare $finish.
+    if (errors != 0) $fatal(1, "FSM verification FAILED with %0d error(s)", errors);
     $finish;
   end
 

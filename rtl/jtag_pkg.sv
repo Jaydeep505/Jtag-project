@@ -25,7 +25,7 @@ package jtag_pkg;
     UPDATE_IR        = 4'hF
   } tap_state_e;
 
-  // ---- Day 2 additions: instruction-register width and mandatory opcodes.
+  // ---- Instruction-register width and mandatory opcodes.
   // 4-bit IR. EXTEST conventionally all-zero, BYPASS all-one; everything
   // not explicitly decoded must select BYPASS (1149.1 safety requirement).
   localparam int unsigned IR_W = 4;

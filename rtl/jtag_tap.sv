@@ -1,5 +1,5 @@
 // jtag_tap.sv
-// Full IEEE 1149.1 TAP: FSM (Day 1) + instruction register + the three
+// Full IEEE 1149.1 TAP: FSM + instruction register + the three
 // mandatory data registers, with the DR mux and the TDO output stage.
 //
 // Data registers:
@@ -29,7 +29,7 @@ module jtag_tap
   output logic [1:0] core_out
 );
 
-  // -------- FSM (Day 1) --------------------------------------------------
+  // -------- FSM ----------------------------------------------------------
   logic reset_n_int;
   logic capture_dr, shift_dr, update_dr;
   logic capture_ir, shift_ir, update_ir;

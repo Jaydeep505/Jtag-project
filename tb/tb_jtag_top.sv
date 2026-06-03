@@ -1,5 +1,5 @@
 // tb_jtag_top.sv
-// Day-2 directed verification of the full TAP (jtag_tap).
+// Directed verification of the full TAP (jtag_tap).
 //
 // Drives real JTAG scan sequences through TDI/TDO and checks the bits:
 //   1. After reset the active instruction is IDCODE; scanning DR returns
@@ -31,7 +31,7 @@ module tb_jtag_top;
     .core_in(core_in), .core_out(core_out)
   );
 
-  // Day-3 assertion checker (immediate assertions, runs in the Icarus CI).
+  // Immediate-assertion checker (runs in the Icarus CI).
   // Under SVA_ON the concurrent assertions in rtl/jtag_sva.sv (bound into the
   // DUT) do the checking instead, so the immediate checker is left out to
   // avoid running two equivalent assertion sets at once.
@@ -183,7 +183,7 @@ module tb_jtag_top;
       $display("=========================================");
 
       if (total_errors != 0)
-        $fatal(1, "Day-2/3 verification FAILED with %0d error(s)", total_errors);
+        $fatal(1, "TAP verification FAILED with %0d error(s)", total_errors);
     end
     $finish;
   end
