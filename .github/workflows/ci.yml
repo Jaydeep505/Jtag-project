@@ -7,17 +7,18 @@ on:
     branches: [ main ]
 
 jobs:
-  # --- Primary gate: Icarus Verilog runs both testbenches. ---------------
-  # Both benches $fatal on error (non-zero exit), so `make` failing is enough
+  # --- Primary gate: Icarus Verilog runs all testbenches. ----------------
+  # Every bench $fatal's on error (non-zero exit), so `make` failing is enough
   # to fail the job. The explicit log checks below are belt-and-braces: they
-  # also fail the job if a FAIL line appears or a PASS line is missing, so a
-  # future change that weakened the exit code can't sneak a red run through.
+  # also fail the job if a FAIL line appears or a bench reports anything other
+  # than PASS, so a future change that weakened the exit code can't sneak a
+  # red run through.
   icarus:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Icarus Verilog
+      - name: Install Icarus Verilog + Tcl
         run: sudo apt-get update && sudo apt-get install -y iverilog tcl
 
       - name: Build + run testbenches
@@ -26,11 +27,12 @@ jobs:
       - name: Fail on any FAIL line
         run: "! grep -q 'FAIL' sim.log"
 
-      - name: Require a PASS from each bench
+      - name: Require every bench to report PASS
         run: |
-          count=$(grep -c 'RESULT     : PASS' sim.log)
-          echo "PASS lines: $count (expected 2)"
-          test "$count" -eq 2
+          total=$(grep -cE 'RESULT *:' sim.log)
+          pass=$(grep -cE 'RESULT *: PASS' sim.log)
+          echo "benches reporting a RESULT: $total, of which PASS: $pass"
+          test "$total" -ge 1 && test "$pass" -eq "$total"
 
   # --- Secondary gate: Verilator elaborates + runs the concurrent SVA. ---
   # This proves rtl/jtag_sva.sv (the `assert property` form) is real and
