@@ -3,3 +3,4 @@ sim/
 *.vvp
 *.vcd
 *.out
+.DS_Store
