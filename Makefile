@@ -32,10 +32,11 @@ RTL_CORE := rtl/jtag_pkg.sv rtl/jtag_tap_fsm.sv
 RTL_FULL := $(RTL_CORE) rtl/jtag_ir.sv rtl/jtag_tap.sv
 
 VEC      := sim/jtag_vectors.vec
+ATPG_VEC := sim/scan_vectors.vec
 
 .PHONY: all fsm top sva vectors replay clean
 
-all: fsm top replay
+all: fsm top replay scan
 
 fsm: | sim
 	$(IVERILOG) -o sim/tap_fsm.vvp $(RTL_CORE) tb/tb_jtag_tap_fsm.sv
@@ -68,6 +69,13 @@ vectors: scripts/gen_jtag_vectors.tcl | sim
 replay: vectors
 	$(IVERILOG) -s tb_jtag_replay -o sim/tap_replay.vvp $(RTL_FULL) tb/tb_jtag_replay.sv
 	$(VVP) sim/tap_replay.vvp
+
+atpg: scripts/atpg.py | sim
+	python3 scripts/atpg.py $(ATPG_VEC)
+
+scan: atpg | sim
+	$(IVERILOG) -s tb_scan_atpg -o sim/scan.vvp rtl/scan_demo.sv tb/tb_scan_atpg.sv
+	$(VVP) sim/scan.vvp
 
 # Order-only prerequisite: git doesn't track empty dirs, so create it on demand.
 sim:

@@ -199,7 +199,24 @@ build. The vector file is plain text, one TCK per line:
 0 0 1     # drive TMS=0, TDI=0, expect TDO=1
 1 0 x     # drive TMS=1, TDI=0, TDO unchecked
 ```
+## Internal scan + ATPG
 
+Boundary scan (the BSR above) is the board-level half of DFT; this is the
+chip-level half. `rtl/scan_demo.sv` converts a small block's flops into
+muxed-D scan flops on a single chain, so every flop becomes controllable and
+observable in shift mode — turning sequential test into combinational test.
+
+`scripts/atpg.py` is a stuck-at ATPG tool: it builds the SA0/SA1 fault list
+for the combinational cloud, fault-simulates exhaustively, picks a minimal
+covering pattern set, and reports fault coverage (27/28 = 96.4%) and the one
+redundant fault it proves untestable. `tb/tb_scan_atpg.sv` replays those
+patterns against the RTL and then injects the detectable and redundant faults
+to confirm both verdicts in hardware.
+
+    make scan     # generate ATPG patterns + replay + mutation-prove them
+    make atpg     # just regenerate sim/scan_vectors.vec
+
+    
 ## Run it
 
 ```
